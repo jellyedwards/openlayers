@@ -173,7 +173,8 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
         })
       : [];
 
-    this.zIndexAttribute_ = options.attributes.find(a => a.name === 'zIndex');
+    this.zIndexAttribute_ = options.attributes ?
+      options.attributes.find(a => a.name === 'zIndex') : undefined;
 
     /**
      * A list of attributes used by the renderer. By default only the position and
