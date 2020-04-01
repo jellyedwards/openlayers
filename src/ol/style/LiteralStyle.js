@@ -36,6 +36,7 @@ export const SymbolType = {
  * @property {import("../color.js").Color|Array<ExpressionValue>|string} [color='#FFFFFF'] Color used for the representation (either fill, line or symbol).
  * @property {ExpressionValue} [opacity=1] Opacity.
  * @property {ExpressionValue} [rotation=0] Symbol rotation in radians.
+ * @property {ExpressionValue} [zIndex=0] zIndex.
  * @property {Array<ExpressionValue, ExpressionValue>} [offset] Offset on X and Y axis for symbols. If not specified, the symbol will be centered.
  * @property {Array<ExpressionValue, ExpressionValue, ExpressionValue, ExpressionValue>} [textureCoord] Texture coordinates. If not specified, the whole texture will be used (range for 0 to 1 on both axes).
  * @property {boolean} [rotateWithView=false] Specify whether the symbol must rotate with the view or stay upwards.
