@@ -14,7 +14,7 @@ import PointerInteraction from './Pointer.js';
 import {getValues} from '../obj.js';
 import VectorEventType from '../source/VectorEventType.js';
 import RBush from '../structs/RBush.js';
-import {fromUserCoordinate, toUserCoordinate} from '../proj.js';
+import {getUserProjection, fromUserCoordinate, toUserCoordinate} from '../proj.js';
 
 
 /**
@@ -243,7 +243,8 @@ class Snap extends PointerInteraction {
   }
 
   /**
-   * @inheritDoc
+   * @param {import("../MapBrowserPointerEvent.js").default} evt Map browser event.
+   * @return {boolean} `false` to stop event propagation.
    */
   handleEvent(evt) {
     const result = this.snapTo(evt.pixel, evt.coordinate, evt.map);
@@ -289,7 +290,9 @@ class Snap extends PointerInteraction {
   }
 
   /**
-   * @inheritDoc
+   * Handle pointer up events.
+   * @param {import("../MapBrowserPointerEvent.js").default} evt Event.
+   * @return {boolean} If the event was consumed.
    */
   handleUpEvent(evt) {
     const featuresToUpdate = getValues(this.pendingFeatures_);
@@ -331,7 +334,10 @@ class Snap extends PointerInteraction {
   }
 
   /**
-   * @inheritDoc
+   * Remove the interaction from its current map and attach it to the new map.
+   * Subclasses may set up event handlers to get notified about changes to
+   * the map here.
+   * @param {import("../PluggableMap.js").default} map Map.
    */
   setMap(map) {
     const currentMap = this.getMap();
@@ -431,8 +437,13 @@ class Snap extends PointerInteraction {
     } else if (this.edge_) {
       const isCircle = closestSegmentData.feature.getGeometry().getType() === GeometryType.CIRCLE;
       if (isCircle) {
-        vertex = closestOnCircle(pixelCoordinate,
-          /** @type {import("../geom/Circle.js").default} */ (closestSegmentData.feature.getGeometry()));
+        let circleGeometry = closestSegmentData.feature.getGeometry();
+        const userProjection = getUserProjection();
+        if (userProjection) {
+          circleGeometry = circleGeometry.clone().transform(userProjection, projection);
+        }
+        vertex = toUserCoordinate(closestOnCircle(projectedCoordinate,
+          /** @type {import("../geom/Circle.js").default} */ (circleGeometry)), projection);
       } else {
         tempSegment[0] = fromUserCoordinate(closestSegment[0], projection);
         tempSegment[1] = fromUserCoordinate(closestSegment[1], projection);
@@ -482,7 +493,16 @@ class Snap extends PointerInteraction {
    * @private
    */
   writeCircleGeometry_(feature, geometry) {
-    const polygon = fromCircle(geometry);
+    const projection = this.getMap().getView().getProjection();
+    let circleGeometry = geometry;
+    const userProjection = getUserProjection();
+    if (userProjection) {
+      circleGeometry = /** @type {import("../geom/Circle.js").default} */ (circleGeometry.clone().transform(userProjection, projection));
+    }
+    const polygon = fromCircle(circleGeometry);
+    if (userProjection) {
+      polygon.transform(projection, userProjection);
+    }
     const coordinates = polygon.getCoordinates()[0];
     for (let i = 0, ii = coordinates.length - 1; i < ii; ++i) {
       const segment = coordinates.slice(i, i + 2);

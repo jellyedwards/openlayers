@@ -3,7 +3,8 @@
  */
 import {getUid} from '../../util.js';
 import ViewHint from '../../ViewHint.js';
-import {buffer, createEmpty, containsExtent, getWidth, intersects as intersectsExtent} from '../../extent.js';
+import {buffer, createEmpty, containsExtent, getWidth, intersects as intersectsExtent, wrapX as wrapExtentX} from '../../extent.js';
+import {wrapX as wrapCoordinateX} from '../../coordinate.js';
 import {fromUserExtent, toUserExtent, getUserProjection, getTransformFromProjections} from '../../proj.js';
 import CanvasBuilderGroup from '../../render/canvas/BuilderGroup.js';
 import ExecutorGroup, {replayDeclutter} from '../../render/canvas/ExecutorGroup.js';
@@ -106,7 +107,10 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Get a rendering container from an existing target, if compatible.
+   * @param {HTMLElement} target Potential render target.
+   * @param {string} transform CSS Transform.
+   * @param {number} opacity Opacity.
    */
   useContainer(target, transform, opacity) {
     if (opacity < 1) {
@@ -116,7 +120,10 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Render the layer.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @param {HTMLElement} target Target that may be used to render content to.
+   * @return {HTMLElement} The rendered element.
    */
   renderFrame(frameState, target) {
 
@@ -220,14 +227,16 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
     const opacity = layerState.opacity;
     const container = this.container;
     if (opacity !== parseFloat(container.style.opacity)) {
-      container.style.opacity = opacity === 1 ? '' : opacity;
+      container.style.opacity = opacity === 1 ? '' : String(opacity);
     }
 
     return this.container;
   }
 
   /**
-   * @inheritDoc
+   * Asynchronous layer level hit detection.
+   * @param {import("../../pixel.js").Pixel} pixel Pixel.
+   * @return {Promise<Array<import("../../Feature").default>>} Promise that resolves with an array of features.
    */
   getFeatures(pixel) {
     return new Promise(function(resolve, reject) {
@@ -275,7 +284,13 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * @param {import("../../coordinate.js").Coordinate} coordinate Coordinate.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @param {number} hitTolerance Hit tolerance in pixels.
+   * @param {function(import("../../Feature.js").FeatureLike, import("../../layer/Layer.js").default): T} callback Feature callback.
+   * @param {Array<import("../../Feature.js").FeatureLike>} declutteredFeatures Decluttered features.
+   * @return {T|void} Callback result.
+   * @template T
    */
   forEachFeatureAtCoordinate(coordinate, frameState, hitTolerance, callback, declutteredFeatures) {
     if (!this.replayGroup_) {
@@ -305,7 +320,7 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Perform action necessary to get the layer rendered after new fonts have loaded
    */
   handleFontsChanged() {
     const layer = this.getLayer();
@@ -324,7 +339,9 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Determine whether render should be called.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @return {boolean} Layer is ready to be rendered.
    */
   prepareFrame(frameState) {
     const vectorLayer = this.getLayer();
@@ -361,9 +378,10 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
     const center = viewState.center.slice();
     const extent = buffer(frameStateExtent,
       vectorLayerRenderBuffer * resolution);
-    const projectionExtent = viewState.projection.getExtent();
+    const loadExtents = [extent.slice()];
+    const projectionExtent = projection.getExtent();
 
-    if (vectorSource.getWrapX() && viewState.projection.canWrapX() &&
+    if (vectorSource.getWrapX() && projection.canWrapX() &&
         !containsExtent(projectionExtent, frameState.extent)) {
       // For the replay group, we need an extent that intersects the real world
       // (-180° to +180°). To support geometries in a coordinate range from -540°
@@ -374,8 +392,14 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
       const gutter = Math.max(getWidth(extent) / 2, worldWidth);
       extent[0] = projectionExtent[0] - gutter;
       extent[2] = projectionExtent[2] + gutter;
-      const worldsAway = Math.floor((center[0] - projectionExtent[0]) / worldWidth);
-      center[0] -= (worldsAway * worldWidth);
+      wrapCoordinateX(center, projection);
+      const loadExtent = wrapExtentX(loadExtents[0], projection);
+      // If the extent crosses the date line, we load data for both edges of the worlds
+      if (loadExtent[0] < projectionExtent[0] && loadExtent[2] < projectionExtent[2]) {
+        loadExtents.push([loadExtent[0] + worldWidth, loadExtent[1], loadExtent[2] + worldWidth, loadExtent[3]]);
+      } else if (loadExtent[0] > projectionExtent[0] && loadExtent[2] > projectionExtent[2]) {
+        loadExtents.push([loadExtent[0] - worldWidth, loadExtent[1], loadExtent[2] - worldWidth, loadExtent[3]]);
+      }
     }
 
     if (!this.dirty_ &&
@@ -398,10 +422,14 @@ class CanvasVectorLayerRenderer extends CanvasLayerRenderer {
     const userProjection = getUserProjection();
     let userTransform;
     if (userProjection) {
-      vectorSource.loadFeatures(toUserExtent(extent, projection), resolution, userProjection);
+      for (let i = 0, ii = loadExtents.length; i < ii; ++i) {
+        vectorSource.loadFeatures(toUserExtent(loadExtents[i], projection), resolution, userProjection);
+      }
       userTransform = getTransformFromProjections(userProjection, projection);
     } else {
-      vectorSource.loadFeatures(extent, resolution, projection);
+      for (let i = 0, ii = loadExtents.length; i < ii; ++i) {
+        vectorSource.loadFeatures(loadExtents[i], resolution, projection);
+      }
     }
 
     const squaredTolerance = getSquaredRenderTolerance(resolution, pixelRatio);

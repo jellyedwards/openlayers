@@ -14,13 +14,14 @@ import {always, primaryAction, altKeyOnly, singleClick} from '../events/conditio
 import {boundingExtent, buffer as bufferExtent, createOrUpdateFromCoordinate as createExtent} from '../extent.js';
 import GeometryType from '../geom/GeometryType.js';
 import Point from '../geom/Point.js';
+import {fromCircle} from '../geom/Polygon.js';
 import PointerInteraction from './Pointer.js';
 import VectorLayer from '../layer/Vector.js';
 import VectorSource from '../source/Vector.js';
 import VectorEventType from '../source/VectorEventType.js';
 import RBush from '../structs/RBush.js';
 import {createEditingStyle} from '../style/Style.js';
-import {fromUserExtent, toUserExtent, fromUserCoordinate, toUserCoordinate} from '../proj.js';
+import {getUserProjection, fromUserExtent, toUserExtent, fromUserCoordinate, toUserCoordinate} from '../proj.js';
 
 
 /**
@@ -403,7 +404,10 @@ class Modify extends PointerInteraction {
   }
 
   /**
-   * @inheritDoc
+   * Activate or deactivate the interaction.
+   * @param {boolean} active Active.
+   * @observable
+   * @api
    */
   setActive(active) {
     if (this.vertexFeature_ && !active) {
@@ -414,7 +418,10 @@ class Modify extends PointerInteraction {
   }
 
   /**
-   * @inheritDoc
+   * Remove the interaction from its current map and attach it to the new map.
+   * Subclasses may set up event handlers to get notified about changes to
+   * the map here.
+   * @param {import("../PluggableMap.js").default} map Map.
    */
   setMap(map) {
     this.overlay_.setMap(map);
@@ -657,7 +664,14 @@ class Modify extends PointerInteraction {
     centerSegmentData.featureSegments = featureSegments;
     circumferenceSegmentData.featureSegments = featureSegments;
     this.rBush_.insert(createExtent(coordinates), centerSegmentData);
-    this.rBush_.insert(geometry.getExtent(), circumferenceSegmentData);
+    let circleGeometry = /** @type {import("../geom/Geometry.js").default} */ (geometry);
+    const userProjection = getUserProjection();
+    if (userProjection && this.getMap()) {
+      const projection = this.getMap().getView().getProjection();
+      circleGeometry = circleGeometry.clone().transform(userProjection, projection);
+      circleGeometry = fromCircle(/** @type {import("../geom/Circle.js").default} */ (circleGeometry)).transform(projection, userProjection);
+    }
+    this.rBush_.insert(circleGeometry.getExtent(), circumferenceSegmentData);
   }
 
   /**
@@ -694,10 +708,11 @@ class Modify extends PointerInteraction {
 
   /**
    * Handles the {@link module:ol/MapBrowserEvent map browser event} and may modify the geometry.
-   * @override
+   * @param {import("../MapBrowserPointerEvent.js").default} mapBrowserEvent Map browser event.
+   * @return {boolean} `false` to stop event propagation.
    */
   handleEvent(mapBrowserEvent) {
-    if (!(/** @type {import("../MapBrowserPointerEvent.js").default} */ (mapBrowserEvent).pointerEvent)) {
+    if (!mapBrowserEvent.pointerEvent) {
       return true;
     }
     this.lastPointerEvent_ = mapBrowserEvent;
@@ -724,7 +739,8 @@ class Modify extends PointerInteraction {
   }
 
   /**
-   * @inheritDoc
+   * Handle pointer drag events.
+   * @param {import("../MapBrowserPointerEvent.js").default} evt Event.
    */
   handleDragEvent(evt) {
     this.ignoreNextSingleClick_ = false;
@@ -785,7 +801,16 @@ class Modify extends PointerInteraction {
             this.changingFeature_ = false;
           } else { // We're dragging the circle's circumference:
             this.changingFeature_ = true;
-            geometry.setRadius(coordinateDistance(geometry.getCenter(), vertex));
+            const projection = evt.map.getView().getProjection();
+            let radius = coordinateDistance(fromUserCoordinate(geometry.getCenter(), projection),
+              fromUserCoordinate(vertex, projection));
+            const userProjection = getUserProjection();
+            if (userProjection) {
+              const circleGeometry = geometry.clone().transform(userProjection, projection);
+              circleGeometry.setRadius(radius);
+              radius = circleGeometry.transform(projection, userProjection).getRadius();
+            }
+            geometry.setRadius(radius);
             this.changingFeature_ = false;
           }
           break;
@@ -801,7 +826,9 @@ class Modify extends PointerInteraction {
   }
 
   /**
-   * @inheritDoc
+   * Handle pointer down events.
+   * @param {import("../MapBrowserPointerEvent.js").default} evt Event.
+   * @return {boolean} If the event was consumed.
    */
   handleDownEvent(evt) {
     if (!this.condition_(evt)) {
@@ -882,7 +909,9 @@ class Modify extends PointerInteraction {
   }
 
   /**
-   * @inheritDoc
+   * Handle pointer up events.
+   * @param {import("../MapBrowserPointerEvent.js").default} evt Event.
+   * @return {boolean} If the event was consumed.
    */
   handleUpEvent(evt) {
     for (let i = this.dragSegments_.length - 1; i >= 0; --i) {
@@ -898,7 +927,14 @@ class Modify extends PointerInteraction {
         circumferenceSegmentData.segment[0] = coordinates;
         circumferenceSegmentData.segment[1] = coordinates;
         this.rBush_.update(createExtent(coordinates), centerSegmentData);
-        this.rBush_.update(geometry.getExtent(), circumferenceSegmentData);
+        let circleGeometry = geometry;
+        const userProjection = getUserProjection();
+        if (userProjection) {
+          const projection = evt.map.getView().getProjection();
+          circleGeometry = circleGeometry.clone().transform(userProjection, projection);
+          circleGeometry = fromCircle(circleGeometry).transform(projection, userProjection);
+        }
+        this.rBush_.update(circleGeometry.getExtent(), circumferenceSegmentData);
       } else {
         this.rBush_.update(boundingExtent(segmentData.segment), segmentData);
       }
@@ -1249,11 +1285,15 @@ function projectedDistanceToSegmentDataSquared(pointCoordinates, segmentData, pr
   const geometry = segmentData.geometry;
 
   if (geometry.getType() === GeometryType.CIRCLE) {
-    const circleGeometry = /** @type {import("../geom/Circle.js").default} */ (geometry);
+    let circleGeometry = /** @type {import("../geom/Circle.js").default} */ (geometry);
 
     if (segmentData.index === CIRCLE_CIRCUMFERENCE_INDEX) {
+      const userProjection = getUserProjection();
+      if (userProjection) {
+        circleGeometry = /** @type {import("../geom/Circle.js").default} */ (circleGeometry.clone().transform(userProjection, projection));
+      }
       const distanceToCenterSquared =
-            squaredCoordinateDistance(circleGeometry.getCenter(), pointCoordinates);
+            squaredCoordinateDistance(circleGeometry.getCenter(), fromUserCoordinate(pointCoordinates, projection));
       const distanceToCircumference =
             Math.sqrt(distanceToCenterSquared) - circleGeometry.getRadius();
       return distanceToCircumference * distanceToCircumference;
@@ -1280,7 +1320,12 @@ function closestOnSegmentData(pointCoordinates, segmentData, projection) {
   const geometry = segmentData.geometry;
 
   if (geometry.getType() === GeometryType.CIRCLE && segmentData.index === CIRCLE_CIRCUMFERENCE_INDEX) {
-    return geometry.getClosestPoint(pointCoordinates);
+    let circleGeometry = /** @type {import("../geom/Circle.js").default} */ (geometry);
+    const userProjection = getUserProjection();
+    if (userProjection) {
+      circleGeometry = /** @type {import("../geom/Circle.js").default} */ (circleGeometry.clone().transform(userProjection, projection));
+    }
+    return toUserCoordinate(circleGeometry.getClosestPoint(fromUserCoordinate(pointCoordinates, projection)), projection);
   }
   const coordinate = fromUserCoordinate(pointCoordinates, projection);
   tempSegment[0] = fromUserCoordinate(segmentData.segment[0], projection);
