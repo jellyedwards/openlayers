@@ -66,6 +66,12 @@ export class ShaderBuilder {
      * @type {string}
      * @private
      */
+    this.zIndexExpression = '0';
+
+    /**
+     * @type {string}
+     * @private
+     */
     this.offsetExpression = 'vec2(0.0)';
 
     /**
@@ -153,6 +159,17 @@ export class ShaderBuilder {
    */
   setRotationExpression(expression) {
     this.rotationExpression = expression;
+    return this;
+  }
+
+  /**
+   * Sets the z-index so higher z-index icons appear above lower z-index icons
+   *
+   * @param {string} expression zIndex expression
+   * @return {ShaderBuilder} the builder object
+   */
+  setZIndexExpression(expression) {
+    this.zIndexExpression = expression;
     return this;
   }
 
@@ -312,6 +329,7 @@ void main(void) {
   vec2 halfSize = ${this.sizeExpression} * 0.5;
   vec2 offset = ${this.offsetExpression};
   float angle = ${this.rotationExpression};
+  float zIndex = ${this.zIndexExpression};
   float offsetX;
   float offsetY;
   if (a_index == 0.0) {
@@ -329,6 +347,7 @@ void main(void) {
   }
   vec4 offsets = offsetMatrix * vec4(offsetX, offsetY, 0.0, 0.0);
   gl_Position = u_projectionMatrix * vec4(a_position, 0.0, 1.0) + offsets;
+  gl_Position.z = zIndex;
   vec4 texCoord = ${this.texCoordExpression};
   float u = a_index == 0.0 || a_index == 3.0 ? texCoord.s : texCoord.p;
   float v = a_index == 2.0 || a_index == 3.0 ? texCoord.t : texCoord.q;
@@ -414,6 +433,7 @@ export function parseLiteralStyle(style) {
   const offset = symbStyle.offset || [0, 0];
   const opacity = symbStyle.opacity !== undefined ? symbStyle.opacity : 1;
   const rotation = symbStyle.rotation !== undefined ? symbStyle.rotation : 0;
+  const zIndex = symbStyle.zIndex !== undefined ? symbStyle.zIndex : 0;
 
   /**
    * @type {import("../style/expressions.js").ParsingContext}
@@ -428,6 +448,7 @@ export function parseLiteralStyle(style) {
   const parsedOffset = expressionToGlsl(vertContext, offset, ValueTypes.NUMBER_ARRAY);
   const parsedTexCoord = expressionToGlsl(vertContext, texCoord, ValueTypes.NUMBER_ARRAY);
   const parsedRotation = expressionToGlsl(vertContext, rotation, ValueTypes.NUMBER);
+  const parsedZIndex = expressionToGlsl(vertContext, zIndex, ValueTypes.NUMBER);
 
   /**
    * @type {import("../style/expressions.js").ParsingContext}
@@ -465,6 +486,7 @@ export function parseLiteralStyle(style) {
     .setSymbolOffsetExpression(parsedOffset)
     .setTextureCoordinateExpression(parsedTexCoord)
     .setSymbolRotateWithView(!!symbStyle.rotateWithView)
+    .setZIndexExpression(parsedZIndex)
     .setColorExpression(
       `vec4(${parsedColor}.rgb, ${parsedColor}.a * ${parsedOpacity} * ${opacityFilter})`);
 

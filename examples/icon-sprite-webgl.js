@@ -31,9 +31,9 @@ const vectorSource = new Vector({
   attributions: 'National UFO Reporting Center'
 });
 
-const oldColor = [255, 160, 110];
-const newColor = [180, 255, 200];
-const size = 16;
+const oldColor = [255, 0, 0];
+const newColor = [0, 255, 200];
+const size = 64;
 
 const style = {
   variables: {
@@ -53,7 +53,7 @@ const style = {
       'interpolate',
       ['linear'],
       ['get', 'year'],
-      1950, oldColor,
+      1910, oldColor,
       2013, newColor
     ],
     rotateWithView: false,
@@ -72,7 +72,8 @@ const style = {
       'triangle', [0.75, 0, 1, 0.5],
       'fireball', [0, 0.5, 0.25, 1],
       [0.75, 0.5, 1, 1]
-    ]
+    ],
+    zIndex: ['get', 'z']
   }
 };
 
@@ -122,12 +123,15 @@ client.onload = function() {
     shapeTypes[shape] = (shapeTypes[shape] ? shapeTypes[shape] : 0) + 1;
     shapeTypes['all']++;
 
+    const year = parseInt(/[0-9]{4}/.exec(line[0])[0]); // extract the year as int
+
     features.push(new Feature({
       datetime: line[0],
-      year: parseInt(/[0-9]{4}/.exec(line[0])[0]), // extract the year as int
+      year: shape === 'fireball' ? 1910 : year,
       shape: shape,
       duration: line[3],
-      geometry: new Point(coords)
+      geometry: new Point(coords),
+      z: shape === 'fireball' ? 0.5 : 0//1 - (2013 - year) / (2013 - 1910)
     }));
   }
   vectorSource.addFeatures(features);

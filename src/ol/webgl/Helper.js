@@ -429,6 +429,9 @@ class WebGLHelper extends Disposable {
 
     gl.useProgram(this.currentProgram_);
 
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.GEQUAL);
+
     // loop backwards in post processes list
     for (let i = this.postProcessPasses_.length - 1; i >= 0; i--) {
       this.postProcessPasses_[i].init(frameState);
@@ -437,7 +440,8 @@ class WebGLHelper extends Disposable {
     gl.bindTexture(gl.TEXTURE_2D, null);
 
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.clearDepth(0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -462,7 +466,12 @@ class WebGLHelper extends Disposable {
     gl.viewport(0, 0, size[0], size[1]);
     gl.bindTexture(gl.TEXTURE_2D, renderTarget.getTexture());
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.clearDepth(0);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.GEQUAL);
+
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, opt_disableAlphaBlend ? gl.ZERO : gl.ONE_MINUS_SRC_ALPHA);
 
