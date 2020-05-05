@@ -18,6 +18,7 @@ import {
 } from '../../../../src/ol/proj.js';
 import {doubleClick} from '../../../../src/ol/events/condition.js';
 import {getValues} from '../../../../src/ol/obj.js';
+import {clearUserProjection, setUserProjection} from '../../../../src/ol/proj.js';
 
 describe('ol.interaction.Modify', function () {
   let target, map, source, features;

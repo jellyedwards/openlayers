@@ -9,6 +9,7 @@ import Feature from '../Feature.js';
 import GeometryType from '../geom/GeometryType.js';
 import MapBrowserEventType from '../MapBrowserEventType.js';
 import Point from '../geom/Point.js';
+import {fromCircle} from '../geom/Polygon.js';
 import PointerInteraction from './Pointer.js';
 import RBush from '../structs/RBush.js';
 import VectorEventType from '../source/VectorEventType.js';

@@ -3105,6 +3105,17 @@ const POLY_STYLE_SEQUENCE = makeStructureNS(NAMESPACE_URIS, [
 
 /**
  * @const
+ * @type {Object<string, Array<string>>}
+ */
+// @ts-ignore
+const POLY_STYLE_SEQUENCE = makeStructureNS(
+  NAMESPACE_URIS, [
+    'color', 'fill', 'outline'
+  ]);
+
+
+/**
+ * @const
  * @type {Object<string, Object<string, import("../xml.js").Serializer>>}
  */
 // @ts-ignore

@@ -19,6 +19,7 @@ import {
   containsCoordinate,
   containsExtent,
   equals,
+  approximatelyEquals,
   getCenter,
   getHeight,
   getIntersection,

@@ -4,6 +4,7 @@
 import {getWidth} from './extent.js';
 import {modulo} from './math.js';
 import {padNumber} from './string.js';
+import {getWidth} from './extent.js';
 
 /**
  * An array of numbers representing an xy coordinate. Example: `[16, 48]`.
