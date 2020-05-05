@@ -38,4 +38,5 @@ export const SymbolType = {
  * @property {Array<ExpressionValue, ExpressionValue>} [offset] Offset on X and Y axis for symbols. If not specified, the symbol will be centered.
  * @property {Array<ExpressionValue, ExpressionValue, ExpressionValue, ExpressionValue>} [textureCoord] Texture coordinates. If not specified, the whole texture will be used (range for 0 to 1 on both axes).
  * @property {boolean} [rotateWithView=false] Specify whether the symbol must rotate with the view or stay upwards.
+ * @property {ExpressionValue} [zIndex=0] zIndex.
  */

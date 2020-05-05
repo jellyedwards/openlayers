@@ -257,9 +257,13 @@ class WebGLPostProcessingPass {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.renderTargetTexture_);
 
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.GEQUAL);
+
     // render the frame buffer to the canvas
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.clearDepth(0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
