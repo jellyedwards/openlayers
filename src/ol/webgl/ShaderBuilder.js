@@ -431,6 +431,7 @@ export function parseLiteralStyle(style) {
   const offset = symbStyle.offset || [0, 0];
   const opacity = symbStyle.opacity !== undefined ? symbStyle.opacity : 1;
   const rotation = symbStyle.rotation !== undefined ? symbStyle.rotation : 0;
+  const zIndex = symbStyle.zIndex !== undefined ? symbStyle.zIndex : 0;
 
   /**
    * @type {import("../style/expressions.js").ParsingContext}
@@ -461,6 +462,11 @@ export function parseLiteralStyle(style) {
     rotation,
     ValueTypes.NUMBER
   );
+
+  // the zIndex isn't used in the shader but is needed as an attribute
+  // to retrieve later for sorting, this will parse and add to context
+  // and is consistent with other LiteralStyle items
+  expressionToGlsl(vertContext, zIndex, ValueTypes.NUMBER);
 
   /**
    * @type {import("../style/expressions.js").ParsingContext}
