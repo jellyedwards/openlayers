@@ -658,8 +658,7 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
    */
   disposeInternal() {
     this.worker_.terminate();
-    this.layer_ = null;
-    this.sourceListenKeys_.forEach(function (key) {
+    this.sourceListenKeys_.forEach(function(key) {
       unlistenByKey(key);
     });
     this.sourceListenKeys_ = null;

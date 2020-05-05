@@ -179,6 +179,14 @@ class LayerRenderer extends Observable {
       layer.changed();
     }
   }
+
+  /**
+   * @inheritDoc
+   */
+  disposeInternal() {
+    this.layer_ = null;
+  }
+
 }
 
 export default LayerRenderer;
