@@ -10,6 +10,7 @@ import CanvasLayerRenderer from './Layer.js';
 import {apply as applyTransform, compose as composeTransform, makeInverse} from '../../transform.js';
 import {numberSafeCompareFunction} from '../../array.js';
 import {createTransformString} from '../../render/canvas.js';
+import {assign} from '../../obj.js';
 
 /**
  * @classdesc
@@ -122,7 +123,10 @@ class CanvasTileLayerRenderer extends CanvasLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * @param {Object<number, Object<string, import("../../Tile.js").default>>} tiles Lookup of loaded tiles by zoom level.
+   * @param {number} zoom Zoom level.
+   * @param {import("../../Tile.js").default} tile Tile.
+   * @return {boolean|void} If `false`, the tile will not be considered loaded.
    */
   loadedTileCallback(tiles, zoom, tile) {
     if (this.isDrawableTile(tile)) {
@@ -132,19 +136,19 @@ class CanvasTileLayerRenderer extends CanvasLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Determine whether render should be called.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @return {boolean} Layer is ready to be rendered.
    */
   prepareFrame(frameState) {
     return !!this.getLayer().getSource();
   }
 
   /**
-   * TODO: File a TypeScript issue about inheritDoc not being followed
-   * all the way.  Without this explicit return type, the VectorTileLayer
-   * renderFrame function does not pass.
-   *
-   * @inheritDoc
-   * @returns {HTMLElement} The rendered element.
+   * Render the layer.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @param {HTMLElement} target Target that may be used to render content to.
+   * @return {HTMLElement} The rendered element.
    */
   renderFrame(frameState, target) {
     const layerState = frameState.layerStatesArray[frameState.layerIndex];
@@ -271,6 +275,7 @@ class CanvasTileLayerRenderer extends CanvasLayerRenderer {
       this.clipUnrotated(context, frameState, layerExtent);
     }
 
+    assign(context, tileSource.getContextOptions());
     this.preRender(context, frameState);
 
     this.renderedTiles.length = 0;
@@ -416,7 +421,7 @@ class CanvasTileLayerRenderer extends CanvasLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * @return {HTMLCanvasElement} Image
    */
   getImage() {
     const context = this.context;

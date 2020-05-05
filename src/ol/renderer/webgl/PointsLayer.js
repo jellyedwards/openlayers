@@ -163,9 +163,6 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
         };
       }) : [];
 
-    this.zIndexAttribute_ = options.attributes ?
-      options.attributes.find(a => a.name === 'zIndex') : undefined;
-
     /**
      * A list of attributes used by the renderer. By default only the position and
      * index of the vertex (0 to 3) are required.
@@ -276,20 +273,6 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
     }.bind(this));
 
     /**
-     * This object will be updated when a source's zIndex changes. Key is zIndex,
-     * and each entry has a list of uids for a particular zIndex e.g.
-     * {
-     *  0: {'uid1': true, 'uid2': true},
-     *  1: {'uid3': true}
-     * }
-     * this allows zIndex sorting without having to sort each feature on each frame,
-     * only have to sort the zIndexes which should be <= features
-     * @type {Object<string, {}>}
-     * @private
-     */
-    this.zIndexCache_ = {};
-
-    /**
      * This object will be updated when the source changes. Key is uid.
      * @type {Object<string, FeatureCacheItem>}
      * @private
@@ -311,65 +294,13 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
       listen(source, VectorEventType.CLEAR, this.handleSourceFeatureClear_, this)
     ];
     source.forEachFeature(function(feature) {
-      this.cacheFeature(feature);
-    }.bind(this));
-  }
-
-  /**
-   * If there's a zIndexAttribute specified use it to get the feature's
-   * zIndex - otherwise default to 0
-   * , ):number
-   * @param {import("../../Feature").default} feature Feature
-   * @param {Object<string, *>} properties Properties
-   * @return {number} zIndex
-   */
-  getZIndex(feature, properties = null) {
-    properties = properties || feature.getProperties();
-
-    if (this.zIndexAttribute_) {
-      return this.zIndexAttribute_.callback(feature, properties) || 0;
-    }
-
-    return 0;
-  }
-
-  /**
-   * cache the feature in this.featureCache_ by uid and also update
-   * the zIndexCache if necessary
-   * @param {import("../../Feature").default} feature Feature
-   */
-  cacheFeature(feature) {
-    const properties = feature.getProperties();
-    const uid = getUid(feature);
-    const existingFeature = this.featureCache_[uid];
-
-    const newZIndex = this.getZIndex(feature, properties);
-
-    // if the old feature had a different zIndex delete it from there
-    if (existingFeature) {
-      const oldZIndex = this.getZIndex(existingFeature.feature, existingFeature.properties);
-
-      if (oldZIndex !== newZIndex) {
-        delete this.zIndexCache_[oldZIndex][uid];
-      }
-    }
-
-    if (!this.zIndexCache_[newZIndex]) {
-      this.zIndexCache_[newZIndex] = {};
-    }
-    // don't need to store a value as such, just using the object
-    // as a quick uid lookup
-    this.zIndexCache_[newZIndex][uid] = true;
-
-    this.featureCache_[uid] = {
-      feature,
-      properties,
-      geometry: feature.getGeometry()
-    };
-
-    if (!existingFeature) {
+      this.featureCache_[getUid(feature)] = {
+        feature: feature,
+        properties: feature.getProperties(),
+        geometry: feature.getGeometry()
+      };
       this.featureCount_++;
-    }
+    }.bind(this));
   }
 
   /**
@@ -377,7 +308,13 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
    * @private
    */
   handleSourceFeatureAdded_(event) {
-    this.cacheFeature(event.feature);
+    const feature = event.feature;
+    this.featureCache_[getUid(feature)] = {
+      feature: feature,
+      properties: feature.getProperties(),
+      geometry: feature.getGeometry()
+    };
+    this.featureCount_++;
   }
 
   /**
@@ -385,7 +322,12 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
    * @private
    */
   handleSourceFeatureChanged_(event) {
-    this.cacheFeature(event.feature);
+    const feature = event.feature;
+    this.featureCache_[getUid(feature)] = {
+      feature: feature,
+      properties: feature.getProperties(),
+      geometry: feature.getGeometry()
+    };
   }
 
   /**
@@ -394,15 +336,8 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
    */
   handleSourceFeatureDelete_(event) {
     const feature = event.feature;
-    const uid = getUid(feature);
-
-    delete this.featureCache_[uid];
+    delete this.featureCache_[getUid(feature)];
     this.featureCount_--;
-
-    // need to find the feature's zIndex so we know where to delete
-    // from in the zIndexCache
-    const zIndex = this.getZIndex(feature);
-    delete this.zIndexCache_[zIndex][uid];
   }
 
   /**
@@ -411,12 +346,12 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
   handleSourceFeatureClear_() {
     this.featureCache_ = {};
     this.featureCount_ = 0;
-
-    this.zIndexCache_ = {};
   }
 
   /**
-   * @inheritDoc
+   * Render the layer.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @return {HTMLElement} The rendered element.
    */
   renderFrame(frameState) {
     const renderCount = this.indicesBuffer_.getSize();
@@ -427,7 +362,7 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
     const layerState = frameState.layerStatesArray[frameState.layerIndex];
     const opacity = layerState.opacity;
     if (opacity !== parseFloat(canvas.style.opacity)) {
-      canvas.style.opacity = opacity;
+      canvas.style.opacity = String(opacity);
     }
 
     if (this.hitDetectionEnabled_) {
@@ -439,7 +374,9 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Determine whether render should be called.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @return {boolean} Layer is ready to be rendered.
    */
   prepareFrame(frameState) {
     const layer = this.getLayer();
@@ -513,53 +450,44 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
     let renderIndex = 0;
     let hitIndex = 0;
     let hitColor;
+    for (const featureUid in this.featureCache_) {
+      featureCache = this.featureCache_[featureUid];
+      geometry = /** @type {import("../../geom").Point} */(featureCache.geometry);
+      if (!geometry || geometry.getType() !== GeometryType.POINT) {
+        continue;
+      }
 
-    // using the zIndexCache we can render features with a lower
-    // zIndex first by sorting the keys of the zIndexCache_ (each
-    // key is the zIndex used by the features in the value)
-    const zIndices = Object.keys(this.zIndexCache_).sort();
-    zIndices.forEach(zIndex => {
-      // render each feature with this zIndex
-      const featureUidsAtZIndex = Object.keys(this.zIndexCache_[zIndex]);
-      featureUidsAtZIndex.forEach(featureUid => {
-        featureCache = this.featureCache_[featureUid];
-        geometry = /** @type {import("../../geom").Point} */(featureCache.geometry);
-        if (!geometry || geometry.getType() !== GeometryType.POINT) {
-          return;
-        }
+      tmpCoords[0] = geometry.getFlatCoordinates()[0];
+      tmpCoords[1] = geometry.getFlatCoordinates()[1];
+      applyTransform(projectionTransform, tmpCoords);
 
-        tmpCoords[0] = geometry.getFlatCoordinates()[0];
-        tmpCoords[1] = geometry.getFlatCoordinates()[1];
-        applyTransform(projectionTransform, tmpCoords);
+      hitColor = colorEncodeId(hitIndex + 6, tmpColor);
 
-        hitColor = colorEncodeId(hitIndex + 6, tmpColor);
+      this.renderInstructions_[renderIndex++] = tmpCoords[0];
+      this.renderInstructions_[renderIndex++] = tmpCoords[1];
 
-        this.renderInstructions_[renderIndex++] = tmpCoords[0];
-        this.renderInstructions_[renderIndex++] = tmpCoords[1];
+      // for hit detection, the feature uid is saved in the opacity value
+      // and the index of the opacity value is encoded in the color values
+      if (this.hitDetectionEnabled_) {
+        this.hitRenderInstructions_[hitIndex++] = tmpCoords[0];
+        this.hitRenderInstructions_[hitIndex++] = tmpCoords[1];
+        this.hitRenderInstructions_[hitIndex++] = hitColor[0];
+        this.hitRenderInstructions_[hitIndex++] = hitColor[1];
+        this.hitRenderInstructions_[hitIndex++] = hitColor[2];
+        this.hitRenderInstructions_[hitIndex++] = hitColor[3];
+        this.hitRenderInstructions_[hitIndex++] = Number(featureUid);
+      }
 
-        // for hit detection, the feature uid is saved in the opacity value
-        // and the index of the opacity value is encoded in the color values
+      // pushing custom attributes
+      let value;
+      for (let j = 0; j < this.customAttributes.length; j++) {
+        value = this.customAttributes[j].callback(featureCache.feature, featureCache.properties);
+        this.renderInstructions_[renderIndex++] = value;
         if (this.hitDetectionEnabled_) {
-          this.hitRenderInstructions_[hitIndex++] = tmpCoords[0];
-          this.hitRenderInstructions_[hitIndex++] = tmpCoords[1];
-          this.hitRenderInstructions_[hitIndex++] = hitColor[0];
-          this.hitRenderInstructions_[hitIndex++] = hitColor[1];
-          this.hitRenderInstructions_[hitIndex++] = hitColor[2];
-          this.hitRenderInstructions_[hitIndex++] = hitColor[3];
-          this.hitRenderInstructions_[hitIndex++] = Number(featureUid);
+          this.hitRenderInstructions_[hitIndex++] = value;
         }
-
-        // pushing custom attributes
-        let value;
-        for (let j = 0; j < this.customAttributes.length; j++) {
-          value = this.customAttributes[j].callback(featureCache.feature, featureCache.properties);
-          this.renderInstructions_[renderIndex++] = value;
-          if (this.hitDetectionEnabled_) {
-            this.hitRenderInstructions_[hitIndex++] = value;
-          }
-        }
-      });
-    });
+      }
+    }
 
     /** @type {import('./Layer').WebGLWorkerGenerateBuffersMessage} */
     const message = {
@@ -587,7 +515,13 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * @param {import("../../coordinate.js").Coordinate} coordinate Coordinate.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @param {number} hitTolerance Hit tolerance in pixels.
+   * @param {function(import("../../Feature.js").FeatureLike, import("../../layer/Layer.js").default): T} callback Feature callback.
+   * @param {Array<import("../../Feature.js").FeatureLike>} declutteredFeatures Decluttered features.
+   * @return {T|void} Callback result.
+   * @template T
    */
   forEachFeatureAtCoordinate(coordinate, frameState, hitTolerance, callback, declutteredFeatures) {
     assert(this.hitDetectionEnabled_, 66);
@@ -643,10 +577,11 @@ class WebGLPointsLayerRenderer extends WebGLLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Clean up.
    */
   disposeInternal() {
     this.worker_.terminate();
+    this.layer_ = null;
     this.sourceListenKeys_.forEach(function(key) {
       unlistenByKey(key);
     });

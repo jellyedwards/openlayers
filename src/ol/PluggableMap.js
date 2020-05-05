@@ -498,7 +498,7 @@ class PluggableMap extends BaseObject {
 
   /**
    *
-   * @inheritDoc
+   * Clean up.
    */
   disposeInternal() {
     this.mapBrowserEventHandler_.dispose();
@@ -989,7 +989,7 @@ class PluggableMap extends BaseObject {
    * @private
    */
   handleSizeChanged_() {
-    if (this.getView()) {
+    if (this.getView() && !this.getView().getAnimating()) {
       this.getView().resolveConstraints(0);
     }
 

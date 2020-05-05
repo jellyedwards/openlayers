@@ -6,7 +6,7 @@ import TileState from '../../TileState.js';
 import ViewHint from '../../ViewHint.js';
 import {listen, unlistenByKey} from '../../events.js';
 import EventType from '../../events/EventType.js';
-import {buffer, containsCoordinate, equals, getIntersection, intersects, containsExtent, getWidth, getTopLeft} from '../../extent.js';
+import {buffer, containsCoordinate, equals, getIntersection, intersects, containsExtent, getTopLeft} from '../../extent.js';
 import VectorTileRenderType from '../../layer/VectorTileRenderType.js';
 import ReplayType from '../../render/canvas/BuilderType.js';
 import CanvasBuilderGroup from '../../render/canvas/BuilderGroup.js';
@@ -25,6 +25,7 @@ import {
 import CanvasExecutorGroup, {replayDeclutter} from '../../render/canvas/ExecutorGroup.js';
 import {clear} from '../../obj.js';
 import {createHitDetectionImageData, hitDetect} from '../../render/canvas/hitdetect.js';
+import {wrapX} from '../../coordinate.js';
 
 
 /**
@@ -135,7 +136,11 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * @param {number} z Tile coordinate z.
+   * @param {number} x Tile coordinate x.
+   * @param {number} y Tile coordinate y.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @return {!import("../../Tile.js").default} Tile.
    */
   getTile(z, x, y, frameState) {
     const pixelRatio = frameState.pixelRatio;
@@ -166,7 +171,8 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
   }
 
   /**
-   * @inheritdoc
+   * @param {import("../../VectorRenderTile.js").default} tile Tile.
+   * @return {boolean} Tile is drawable.
    */
   isDrawableTile(tile) {
     const layer = this.getLayer();
@@ -181,7 +187,9 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Determine whether render should be called.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @return {boolean} Layer is ready to be rendered.
    */
   prepareFrame(frameState) {
     const layerRevision = this.getLayer().getRevision();
@@ -278,13 +286,19 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * @param {import("../../coordinate.js").Coordinate} coordinate Coordinate.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @param {number} hitTolerance Hit tolerance in pixels.
+   * @param {function(import("../../Feature.js").FeatureLike, import("../../layer/Layer.js").default): T} callback Feature callback.
+   * @param {Array<import("../../Feature.js").FeatureLike>} declutteredFeatures Decluttered features.
+   * @return {T|void} Callback result.
+   * @template T
    */
   forEachFeatureAtCoordinate(coordinate, frameState, hitTolerance, callback, declutteredFeatures) {
     const resolution = frameState.viewState.resolution;
     const rotation = frameState.viewState.rotation;
     hitTolerance = hitTolerance == undefined ? 0 : hitTolerance;
-    const layer = /** @type {import("../../layer/VectorTile.js").default} */ (this.getLayer());
+    const layer = this.getLayer();
     const declutter = layer.getDeclutter();
     const source = layer.getSource();
     const tileGrid = source.getTileGridForProjection(frameState.viewState.projection);
@@ -333,7 +347,9 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Asynchronous layer level hit detection.
+   * @param {import("../../pixel.js").Pixel} pixel Pixel.
+   * @return {Promise<Array<import("../../Feature").default>>} Promise that resolves with an array of features.
    */
   getFeatures(pixel) {
     return new Promise(function(resolve, reject) {
@@ -353,9 +369,7 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
           if (tile.getState() === TileState.LOADED && tile.hifi) {
             const extent = tileGrid.getTileCoordExtent(tile.tileCoord);
             if (source.getWrapX() && projection.canWrapX() && !containsExtent(projectionExtent, extent)) {
-              const worldWidth = getWidth(projectionExtent);
-              const worldsAway = Math.floor((coordinate[0] - projectionExtent[0]) / worldWidth);
-              coordinate[0] -= (worldsAway * worldWidth);
+              wrapX(coordinate, projection);
             }
             break;
           }
@@ -395,7 +409,7 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Perform action necessary to get the layer rendered after new fonts have loaded
    */
   handleFontsChanged() {
     clear(this.renderTileImageQueue_);
@@ -415,7 +429,10 @@ class CanvasVectorTileLayerRenderer extends CanvasTileLayerRenderer {
   }
 
   /**
-   * @inheritDoc
+   * Render the layer.
+   * @param {import("../../PluggableMap.js").FrameState} frameState Frame state.
+   * @param {HTMLElement} target Target that may be used to render content to.
+   * @return {HTMLElement} The rendered element.
    */
   renderFrame(frameState, target) {
     const viewHints = frameState.viewHints;
